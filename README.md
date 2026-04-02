@@ -50,8 +50,10 @@ python -m app.experiments --input data/experiment_urls.csv --target-fpr 0.01 --t
 ```
 
 输出：
-- `artifacts/experiment_report.json`
+- `artifacts/experiment_report.json`（包含单类来源切片跳过信息）
 - `artifacts/false_positive_cases.csv`
+
+说明：再训练评估会自动排除被挖掘为硬负样本的测试片段，避免评估泄漏。
 
 ## 5. 启动仪表盘
 

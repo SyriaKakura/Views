@@ -164,6 +164,11 @@ else:
                 }
             )
 
+        skipped = content.get("skipped_single_class_sources", [])
+        if skipped:
+            st.caption(f"{model_type}: 跳过 {len(skipped)} 个单类来源切片，避免每源指标失真")
+            st.dataframe(pd.DataFrame(skipped), use_container_width=True)
+
     if model_rows:
         st.subheader("固定低 FPR 点的整体对比")
         st.dataframe(pd.DataFrame(model_rows), use_container_width=True)
@@ -189,6 +194,9 @@ else:
         st.write(
             {
                 "hard_negative_count": retrain.get("hard_negative_count"),
+                "evaluation_excludes_hard_negatives": retrain.get("evaluation_excludes_hard_negatives"),
+                "excluded_samples": retrain.get("excluded_samples"),
+                "evaluation_samples": retrain.get("evaluation_samples"),
                 "baseline_tpr": retrain.get("baseline", {}).get("tpr"),
                 "baseline_fpr": retrain.get("baseline", {}).get("fpr"),
                 "retrained_tpr": retrain.get("retrained", {}).get("tpr"),

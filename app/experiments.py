@@ -10,8 +10,9 @@ from urllib.parse import urlsplit
 
 import numpy as np
 import pandas as pd
+from sklearn.metrics import confusion_matrix, roc_auc_score
 
-from app.modeling import evaluate_binary, threshold_at_fpr, train_model
+from app.modeling import threshold_at_fpr, train_model
 
 
 def parse_args() -> argparse.Namespace:
@@ -42,7 +43,7 @@ def _prepare_dataframe(df: pd.DataFrame, source_col: str, time_col: str) -> pd.D
     if time_col in out.columns:
         out[time_col] = pd.to_datetime(out[time_col], errors="coerce")
         out = out.sort_values(time_col).reset_index(drop=True)
-        out["_time_key"] = out[time_col].fillna(method="ffill").fillna(method="bfill")
+        out["_time_key"] = out[time_col].ffill().bfill()
     else:
         out["_time_key"] = pd.date_range("2025-01-01", periods=len(out), freq="h")
 
@@ -64,9 +65,61 @@ def _psi(a: np.ndarray, b: np.ndarray, bins: int = 10) -> float:
     return float(np.sum((a_dist - b_dist) * np.log(a_dist / b_dist)))
 
 
-def _metrics_at_threshold(y: np.ndarray, probs: np.ndarray, threshold: float) -> dict[str, float]:
-    m = evaluate_binary(y, probs, threshold=threshold)
-    return {k: float(v) for k, v in m.items()}
+def _metrics_at_threshold(y: np.ndarray, probs: np.ndarray, threshold: float) -> dict[str, float | str | bool]:
+    y = np.asarray(y).astype(int)
+    probs = np.asarray(probs).astype(float)
+    preds = (probs >= threshold).astype(int)
+
+    labels = np.unique(y)
+    out: dict[str, float | str | bool] = {
+        "support": float(len(y)),
+        "positive_count": float((y == 1).sum()),
+        "negative_count": float((y == 0).sum()),
+    }
+
+    if labels.size < 2:
+        out.update(
+            {
+                "tp": 0.0,
+                "fp": 0.0,
+                "fn": 0.0,
+                "tn": 0.0,
+                "tpr": float("nan"),
+                "fpr": float("nan"),
+                "precision": float("nan"),
+                "recall": float("nan"),
+                "f1": float("nan"),
+                "accuracy": float((preds == y).mean() if len(y) else 0.0),
+                "roc_auc": float("nan"),
+                "single_class_slice": True,
+                "status": "skipped_single_class_slice",
+            }
+        )
+        return out
+
+    tn, fp, fn, tp = confusion_matrix(y, preds, labels=[0, 1]).ravel()
+    precision = float(tp / max(tp + fp, 1))
+    recall = float(tp / max(tp + fn, 1))
+    f1 = float(0.0 if (precision + recall) == 0 else 2 * precision * recall / (precision + recall))
+
+    out.update(
+        {
+            "tp": float(tp),
+            "fp": float(fp),
+            "fn": float(fn),
+            "tn": float(tn),
+            "accuracy": float((preds == y).mean()),
+            "precision": precision,
+            "recall": recall,
+            "f1": f1,
+            "roc_auc": float(roc_auc_score(y, probs)),
+            "fpr": float(fp / max(fp + tn, 1)),
+            "tpr": float(tp / max(tp + fn, 1)),
+            "single_class_slice": False,
+            "status": "ok",
+        }
+    )
+    return out
 
 
 def run_experiment(df: pd.DataFrame, target_fpr: float, train_ratio: float, source_col: str) -> dict[str, Any]:
@@ -111,9 +164,22 @@ def run_experiment(df: pd.DataFrame, target_fpr: float, train_ratio: float, sour
         threshold = threshold_at_fpr(train_df["label"].astype(int).to_numpy(), train_probs, target_fpr=target_fpr)
 
         source_cmp = {}
+        skipped_sources: list[dict[str, Any]] = []
         for source, group in test_df.groupby(source_col):
             group_probs = pipe.predict_proba(group["url"].astype(str).tolist())[:, 1]
-            source_cmp[str(source)] = _metrics_at_threshold(group["label"].astype(int).to_numpy(), group_probs, threshold)
+            sm = _metrics_at_threshold(group["label"].astype(int).to_numpy(), group_probs, threshold)
+            if bool(sm.get("single_class_slice")):
+                skipped_sources.append(
+                    {
+                        "source": str(source),
+                        "support": int(len(group)),
+                        "positive_count": int((group["label"].astype(int) == 1).sum()),
+                        "negative_count": int((group["label"].astype(int) == 0).sum()),
+                        "reason": "single_class_slice",
+                    }
+                )
+                continue
+            source_cmp[str(source)] = sm
 
         fp_mask = (test_df["label"].to_numpy() == 0) & (test_probs >= threshold)
         fp_cases = test_df.loc[fp_mask, ["url", source_col]].copy()
@@ -132,9 +198,10 @@ def run_experiment(df: pd.DataFrame, target_fpr: float, train_ratio: float, sour
             "threshold_at_target_fpr": threshold,
             "future_window_metrics": _metrics_at_threshold(test_df["label"].astype(int).to_numpy(), test_probs, threshold),
             "source_tpr_compare": {
-                source: {"tpr": values["tpr"], "fpr": values["fpr"], "support": int((test_df[source_col] == source).sum())}
+                source: {"tpr": values["tpr"], "fpr": values["fpr"], "support": int(values["support"])}
                 for source, values in source_cmp.items()
             },
+            "skipped_single_class_sources": skipped_sources,
             "drift": drift,
             "false_positive_samples": fp_cases.to_dict(orient="records"),
         }
@@ -147,7 +214,7 @@ def run_retrain_loop(df: pd.DataFrame, source_col: str, target_fpr: float, train
     train_df = df.iloc[:split_idx].copy()
     test_df = df.iloc[split_idx:].copy()
 
-    baseline = train_model(
+    train_model(
         train_df["url"].astype(str).tolist(),
         train_df["label"].astype(int).tolist(),
         model_type="logistic",
@@ -172,7 +239,7 @@ def run_retrain_loop(df: pd.DataFrame, source_col: str, target_fpr: float, train
     else:
         expanded_train = train_df[["url", "label", source_col]].copy()
 
-    _ = train_model(
+    train_model(
         expanded_train["url"].astype(str).tolist(),
         expanded_train["label"].astype(int).tolist(),
         model_type="logistic",
@@ -180,16 +247,26 @@ def run_retrain_loop(df: pd.DataFrame, source_col: str, target_fpr: float, train
         target_fpr=target_fpr,
     )
 
+    eval_mask = ~fp_mask
+    eval_df = test_df.loc[eval_mask].copy()
+    if eval_df.empty:
+        eval_df = test_df.copy()
+
     retrain_bundle = joblib.load("artifacts/retrain_loop.joblib")
     retrain_pipe = retrain_bundle["pipeline"]
     rt_train_probs = retrain_pipe.predict_proba(expanded_train["url"].astype(str).tolist())[:, 1]
-    rt_test_probs = retrain_pipe.predict_proba(test_df["url"].astype(str).tolist())[:, 1]
+    rt_eval_probs = retrain_pipe.predict_proba(eval_df["url"].astype(str).tolist())[:, 1]
+    base_eval_probs = base_pipe.predict_proba(eval_df["url"].astype(str).tolist())[:, 1]
+
     rt_threshold = threshold_at_fpr(expanded_train["label"].to_numpy(), rt_train_probs, target_fpr=target_fpr)
 
     return {
         "hard_negative_count": int(len(hard_neg)),
-        "baseline": _metrics_at_threshold(test_df["label"].to_numpy(), base_test_probs, threshold),
-        "retrained": _metrics_at_threshold(test_df["label"].to_numpy(), rt_test_probs, rt_threshold),
+        "evaluation_excludes_hard_negatives": True,
+        "evaluation_samples": int(len(eval_df)),
+        "excluded_samples": int(fp_mask.sum()),
+        "baseline": _metrics_at_threshold(eval_df["label"].to_numpy(), base_eval_probs, threshold),
+        "retrained": _metrics_at_threshold(eval_df["label"].to_numpy(), rt_eval_probs, rt_threshold),
         "baseline_threshold": threshold,
         "retrained_threshold": rt_threshold,
     }
