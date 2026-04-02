@@ -70,3 +70,5 @@ streamlit run dashboard.py
 ```bash
 docker compose up --build
 ```
+
+说明：`docker-compose.yml` 中 API 服务会在启动时先训练并写入 `artifacts/url_detector.joblib`，以避免与共享卷 `artifacts_data` 挂载后出现“镜像内模型文件被卷覆盖”的冲突。
