@@ -1,0 +1,22 @@
+services:
+  api:
+    build: .
+    container_name: url-detector-api
+    ports:
+      - "8000:8000"
+    volumes:
+      - artifacts_data:/app/artifacts
+
+  dashboard:
+    build: .
+    container_name: url-detector-dashboard
+    command: streamlit run dashboard.py --server.port=8501 --server.address=0.0.0.0
+    ports:
+      - "8501:8501"
+    volumes:
+      - artifacts_data:/app/artifacts
+    depends_on:
+      - api
+
+volumes:
+  artifacts_data:

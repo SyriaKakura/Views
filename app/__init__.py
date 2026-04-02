@@ -1,0 +1,1 @@
+"""Malicious URL detector package."""
