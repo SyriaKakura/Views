@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
-from typing import Sequence
+from typing import Any, Sequence
 
 import joblib
 import numpy as np
@@ -18,6 +18,7 @@ from sklearn.metrics import (
     precision_score,
     recall_score,
     roc_auc_score,
+    roc_curve,
 )
 from sklearn.model_selection import train_test_split
 from sklearn.pipeline import FeatureUnion, Pipeline
@@ -52,26 +53,53 @@ class TrainResult:
     metrics: dict[str, float]
 
 
-def build_logistic_pipeline(max_features: int = 200000) -> Pipeline:
+def build_feature_union(max_features: int = 200000) -> FeatureUnion:
     tfidf = TfidfVectorizer(
         analyzer="char",
         ngram_range=(3, 5),
         min_df=2,
         max_features=max_features,
     )
-    features = FeatureUnion(
+    return FeatureUnion(
         [
             ("tfidf", tfidf),
             ("struct", StructFeatureTransformer()),
         ]
     )
-    clf = LogisticRegression(
-        solver="saga",
-        max_iter=2000,
-        n_jobs=-1,
-        class_weight="balanced",
-    )
-    return Pipeline([("features", features), ("clf", clf)])
+
+
+def build_estimator(model_type: str):
+    model_type = model_type.lower()
+    if model_type == "logistic":
+        return LogisticRegression(
+            solver="saga",
+            max_iter=2000,
+            n_jobs=-1,
+            class_weight="balanced",
+        )
+
+    if model_type == "lightgbm":
+        try:
+            from lightgbm import LGBMClassifier
+        except ImportError as exc:
+            raise ImportError("lightgbm not installed. please install requirements.txt") from exc
+
+        return LGBMClassifier(
+            n_estimators=300,
+            learning_rate=0.05,
+            num_leaves=63,
+            subsample=0.9,
+            colsample_bytree=0.9,
+            random_state=42,
+            class_weight="balanced",
+            n_jobs=-1,
+        )
+
+    raise ValueError(f"Unsupported model_type: {model_type}")
+
+
+def build_pipeline(model_type: str = "logistic", max_features: int = 200000) -> Pipeline:
+    return Pipeline([("features", build_feature_union(max_features=max_features)), ("clf", build_estimator(model_type))])
 
 
 def evaluate_binary(y_true: Sequence[int], probas: np.ndarray, threshold: float = 0.5) -> dict[str, float]:
@@ -87,13 +115,33 @@ def evaluate_binary(y_true: Sequence[int], probas: np.ndarray, threshold: float 
         "fp": float(fp),
         "fn": float(fn),
         "tn": float(tn),
+        "fpr": float(fp / max(fp + tn, 1)),
+        "tpr": float(tp / max(tp + fn, 1)),
     }
 
 
-def train_logistic(
+def threshold_at_fpr(y_true: Sequence[int], probas: np.ndarray, target_fpr: float = 0.01) -> float:
+    fpr, _, thresholds = roc_curve(y_true, probas)
+    valid = np.where(fpr <= target_fpr)[0]
+    if len(valid) == 0:
+        return 1.0
+    return float(thresholds[valid[-1]])
+
+
+def predict_scores(model_obj: Any, urls: Sequence[str]) -> np.ndarray:
+    if isinstance(model_obj, dict) and "pipeline" in model_obj:
+        pipeline = model_obj["pipeline"]
+    else:
+        pipeline = model_obj
+    return pipeline.predict_proba(list(urls))[:, 1]
+
+
+def train_model(
     urls: Sequence[str],
     labels: Sequence[int],
-    model_path: str = "artifacts/url_detector_logistic.joblib",
+    model_type: str = "logistic",
+    model_path: str = "artifacts/url_detector.joblib",
+    target_fpr: float = 0.01,
     test_size: float = 0.2,
     random_state: int = 42,
 ) -> TrainResult:
@@ -104,12 +152,26 @@ def train_logistic(
         random_state=random_state,
         stratify=labels,
     )
-    pipe = build_logistic_pipeline()
-    pipe.fit(x_train, y_train)
 
-    probas = pipe.predict_proba(x_test)[:, 1]
-    metrics = evaluate_binary(y_test, probas)
+    pipeline = build_pipeline(model_type=model_type)
+    pipeline.fit(x_train, y_train)
+
+    probas = pipeline.predict_proba(x_test)[:, 1]
+    low_fpr_threshold = threshold_at_fpr(y_test, probas, target_fpr=target_fpr)
+    metrics = evaluate_binary(y_test, probas, threshold=low_fpr_threshold)
+    metrics["threshold_low_fpr"] = float(low_fpr_threshold)
+    metrics["target_fpr"] = float(target_fpr)
+    metrics["model_type"] = model_type
+
+    model_obj = {
+        "pipeline": pipeline,
+        "meta": {
+            "model_type": model_type,
+            "target_fpr": target_fpr,
+            "threshold": low_fpr_threshold,
+        },
+    }
 
     Path(model_path).parent.mkdir(parents=True, exist_ok=True)
-    joblib.dump(pipe, model_path)
+    joblib.dump(model_obj, model_path)
     return TrainResult(model_path=model_path, metrics=metrics)
