@@ -58,12 +58,17 @@ python -m app.experiments --input data/experiment_urls.csv --target-fpr 0.01 --t
 streamlit run dashboard.py
 ```
 
+可配置环境变量：
+- `API_BASE_URL`：仪表盘调用检测 API 的地址，默认 `http://localhost:8000`。
+
 仪表盘同时展示：
 - API 在线预测监控
 - 实验报告中的跨源泛化结果
 - 漂移指标（PSI）
 - 误报样本
 - 再训练闭环前后对比
+- 可视化单条/批量 URL 检测（直接调用 API）
+- 从种子网站批量采集 URL，并导出为检测或训练数据（`url,label`）
 
 ## 6. Docker Compose（可选）
 
