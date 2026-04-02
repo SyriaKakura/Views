@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Sequence
 
 import joblib
@@ -109,5 +110,6 @@ def train_logistic(
     probas = pipe.predict_proba(x_test)[:, 1]
     metrics = evaluate_binary(y_test, probas)
 
+    Path(model_path).parent.mkdir(parents=True, exist_ok=True)
     joblib.dump(pipe, model_path)
     return TrainResult(model_path=model_path, metrics=metrics)
