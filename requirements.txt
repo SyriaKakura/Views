@@ -7,3 +7,4 @@ pandas==2.3.2
 joblib==1.5.2
 streamlit==1.49.1
 lightgbm==4.6.0
+requests==2.32.5
