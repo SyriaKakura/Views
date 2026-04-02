@@ -70,3 +70,5 @@ streamlit run dashboard.py
 ```bash
 docker compose up --build
 ```
+
+说明：`docker-compose.yml` 中 API 服务启动时会先检查 `artifacts/url_detector.joblib` 是否存在；仅在文件缺失时才训练并写入共享卷 `artifacts_data`。这样既避免了挂载卷覆盖镜像内模型文件导致的启动冲突，也避免了持续运行场景下每次重启都重复训练。

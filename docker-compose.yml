@@ -2,6 +2,11 @@ services:
   api:
     build: .
     container_name: url-detector-api
+    command: >
+      bash -lc "if [ ! -f artifacts/url_detector.joblib ]; then
+      python -m app.train --input data/sample_urls.csv --model-path artifacts/url_detector.joblib;
+      fi
+      && uvicorn app.api:app --host 0.0.0.0 --port 8000"
     ports:
       - "8000:8000"
     volumes:
