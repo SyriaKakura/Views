@@ -5,7 +5,7 @@ services:
     ports:
       - "8000:8000"
     volumes:
-      - ./artifacts:/app/artifacts
+      - artifacts_data:/app/artifacts
 
   dashboard:
     build: .
@@ -14,6 +14,9 @@ services:
     ports:
       - "8501:8501"
     volumes:
-      - ./artifacts:/app/artifacts
+      - artifacts_data:/app/artifacts
     depends_on:
       - api
+
+volumes:
+  artifacts_data:

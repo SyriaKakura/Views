@@ -8,18 +8,30 @@ from functools import lru_cache
 
 import joblib
 from fastapi import FastAPI, HTTPException
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, constr
 
 from app.storage import init_db, insert_prediction
 
 MODEL_PATH = os.getenv("MODEL_PATH", "artifacts/url_detector_logistic.joblib")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "v1.0-logistic")
-THRESHOLD = float(os.getenv("THRESHOLD", "0.5"))
 DB_PATH = os.getenv("DB_PATH", "artifacts/predictions.db")
 
 
+def _parse_threshold(raw: str) -> float:
+    threshold = float(raw)
+    if not 0.0 <= threshold <= 1.0:
+        raise ValueError("THRESHOLD must be between 0 and 1")
+    return threshold
+
+
+THRESHOLD = _parse_threshold(os.getenv("THRESHOLD", "0.5"))
+
+
+UrlInput = constr(strip_whitespace=True, min_length=1, max_length=4096, pattern=r"^[^\x00-\x1F\x7F]+$")
+
+
 class PredictRequest(BaseModel):
-    url: str = Field(..., min_length=1, max_length=4096)
+    url: UrlInput
 
 
 class PredictResponse(BaseModel):
@@ -31,7 +43,7 @@ class PredictResponse(BaseModel):
 
 
 class BatchRequest(BaseModel):
-    urls: list[str] = Field(..., min_length=1, max_length=200)
+    urls: list[UrlInput] = Field(..., min_length=1, max_length=200)
 
 
 class BatchItem(BaseModel):
