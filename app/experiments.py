@@ -122,6 +122,11 @@ def _metrics_at_threshold(y: np.ndarray, probs: np.ndarray, threshold: float) ->
     return out
 
 
+def _has_both_classes(y: pd.Series | np.ndarray) -> bool:
+    labels = np.asarray(y).astype(int)
+    return np.unique(labels).size >= 2
+
+
 def run_experiment(df: pd.DataFrame, target_fpr: float, train_ratio: float, source_col: str) -> dict[str, Any]:
     split_idx = max(1, int(len(df) * train_ratio))
     train_df = df.iloc[:split_idx].copy()
@@ -166,19 +171,21 @@ def run_experiment(df: pd.DataFrame, target_fpr: float, train_ratio: float, sour
         source_cmp = {}
         skipped_sources: list[dict[str, Any]] = []
         for source, group in test_df.groupby(source_col):
-            group_probs = pipe.predict_proba(group["url"].astype(str).tolist())[:, 1]
-            sm = _metrics_at_threshold(group["label"].astype(int).to_numpy(), group_probs, threshold)
-            if bool(sm.get("single_class_slice")):
+            labels = group["label"].astype(int).to_numpy()
+            if not _has_both_classes(labels):
                 skipped_sources.append(
                     {
                         "source": str(source),
                         "support": int(len(group)),
-                        "positive_count": int((group["label"].astype(int) == 1).sum()),
-                        "negative_count": int((group["label"].astype(int) == 0).sum()),
+                        "positive_count": int((labels == 1).sum()),
+                        "negative_count": int((labels == 0).sum()),
                         "reason": "single_class_slice",
                     }
                 )
                 continue
+
+            group_probs = pipe.predict_proba(group["url"].astype(str).tolist())[:, 1]
+            sm = _metrics_at_threshold(labels, group_probs, threshold)
             source_cmp[str(source)] = sm
 
         fp_mask = (test_df["label"].to_numpy() == 0) & (test_probs >= threshold)
