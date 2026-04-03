@@ -12,7 +12,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
-from app.features import normalize_url
+from app.features import legacy_url_features, normalize_url
 from app.modeling import train_model
 from app.storage import init_db, insert_prediction
 
@@ -86,6 +86,14 @@ class ModelInfo(BaseModel):
     target_fpr: float
     feature_version: str
     trained_at_utc: str
+
+
+class LegacyDetectRequest(BaseModel):
+    url: str = Field(..., min_length=1, max_length=4096)
+
+
+class LegacyBatchRequest(BaseModel):
+    urls: list[str] = Field(..., min_length=1, max_length=100)
 
 
 @lru_cache(maxsize=1)
@@ -164,6 +172,20 @@ def predict_batch(req: BatchRequest):
     return BatchResponse(items=items, model_version=MODEL_VERSION)
 
 
+@app.get("/health")
+def health_check():
+    try:
+        bundle = get_model_bundle()
+        loaded = bool(bundle.get("pipeline") is not None)
+    except Exception:
+        loaded = False
+    return {
+        "status": "healthy",
+        "model_loaded": loaded,
+        "model_version": MODEL_VERSION,
+    }
+
+
 @app.get("/api/v1/model_info", response_model=ModelInfo)
 def model_info():
     if not os.path.exists(MODEL_PATH):
@@ -180,3 +202,58 @@ def model_info():
         feature_version=str(meta.get("feature_version", "unknown")),
         trained_at_utc=str(meta.get("trained_at_utc", "unknown")),
     )
+
+
+@app.post("/detect")
+def detect_legacy(req: LegacyDetectRequest):
+    response = predict(PredictRequest(url=req.url))
+    features = legacy_url_features(req.url)
+    return {
+        "status": "success",
+        "result": {
+            "url": normalize_url(req.url),
+            "is_malicious": bool(response.malicious),
+            "confidence": float(response.score),
+            "features": features,
+        },
+    }
+
+
+@app.post("/batch_detect")
+def batch_detect_legacy(req: LegacyBatchRequest):
+    batch = predict_batch(BatchRequest(urls=req.urls))
+    return {
+        "status": "success",
+        "total_urls": len(batch.items),
+        "results": [
+            {
+                "url": item.url,
+                "is_malicious": bool(item.malicious),
+                "confidence": float(item.score),
+            }
+            for item in batch.items
+        ],
+    }
+
+
+@app.post("/features")
+def extract_features_legacy(req: LegacyDetectRequest):
+    normalized_url = normalize_url(req.url)
+    return {
+        "status": "success",
+        "url": normalized_url,
+        "features": legacy_url_features(normalized_url),
+    }
+
+
+@app.get("/stats")
+def stats_legacy():
+    bundle = get_model_bundle()
+    feature_names = sorted(legacy_url_features("https://example.com").keys())
+    return {
+        "status": "success",
+        "model_loaded": bool(bundle.get("pipeline") is not None),
+        "feature_count": len(feature_names),
+        "features": feature_names,
+        "model_version": MODEL_VERSION,
+    }

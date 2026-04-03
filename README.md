@@ -2,6 +2,7 @@
 
 本项目实现了完整闭环：
 - URL 文本特征 + 结构特征
+- 兼容 url-master 的 21 维特征抽取接口（`/features`）
 - TF-IDF（char n-gram）
 - 双模型训练（Logistic / LightGBM）
 - 训练前数据清洗（URL 规范化、去重、时间排序）
@@ -43,6 +44,13 @@ uvicorn app.api:app --host 0.0.0.0 --port 8000
 - `POST /api/v1/predict`
 - `POST /api/v1/predict_batch`
 - `GET /api/v1/model_info`
+- `GET /health`
+
+同时提供与 `url-master` 对齐的兼容接口（便于平滑迁移）：
+- `POST /detect`
+- `POST /batch_detect`
+- `POST /features`
+- `GET /stats`
 
 `/api/v1/model_info` 返回：
 - 模型类型
