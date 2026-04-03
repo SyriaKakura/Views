@@ -157,6 +157,19 @@ st.set_page_config(page_title="Malicious URL Detector Dashboard", layout="wide")
 st.title("恶意 URL 检测可视化平台")
 st.caption("支持单条 / 多条 URL 检测，并提供模型训练优化对比图。")
 
+if "single_detect_result" not in st.session_state:
+    st.session_state.single_detect_result = None
+if "batch_detect_result" not in st.session_state:
+    st.session_state.batch_detect_result = None
+if "csv_detect_result" not in st.session_state:
+    st.session_state.csv_detect_result = None
+if "collected_urls_result" not in st.session_state:
+    st.session_state.collected_urls_result = None
+if "collected_detect_result" not in st.session_state:
+    st.session_state.collected_detect_result = None
+if "collected_errors" not in st.session_state:
+    st.session_state.collected_errors = []
+
 main_tabs = st.tabs(["URL 检测", "URL 采集", "在线监控", "模型训练优化对比"])
 
 with main_tabs[0]:
@@ -164,7 +177,11 @@ with main_tabs[0]:
     detect_tabs = st.tabs(["单条检测", "多条检测（文本）", "多条检测（CSV）"])
 
     with detect_tabs[0]:
-        single_url = st.text_input("输入要检测的 URL", placeholder="https://example.com/path")
+        single_url = st.text_input(
+            "输入要检测的 URL",
+            placeholder="https://example.com/path",
+            key="single_url_input",
+        )
         if st.button("检测单条 URL"):
             candidate = normalize_http_url(single_url or "")
             if not candidate:
@@ -176,15 +193,19 @@ with main_tabs[0]:
                     resp = requests.post(f"{API_BASE_URL}/api/v1/predict", json={"url": candidate}, timeout=8)
                     resp.raise_for_status()
                     st.success("检测完成")
-                    render_detection_result(resp.json())
+                    st.session_state.single_detect_result = resp.json()
                 except Exception as exc:
                     st.error(f"调用检测接口失败：{exc}")
+        if st.session_state.single_detect_result:
+            st.info("已恢复上次单条检测结果")
+            render_detection_result(st.session_state.single_detect_result)
 
     with detect_tabs[1]:
         batch_input = st.text_area(
             "每行一个 URL",
             placeholder="https://a.com\nhttps://b.com/login",
             height=160,
+            key="batch_urls_text_input",
         )
         if st.button("检测多条 URL"):
             urls, invalid_urls = parse_url_lines(batch_input)
@@ -207,17 +228,20 @@ with main_tabs[0]:
                         all_items.extend(resp.json().get("items", []))
 
                     batch_df = pd.DataFrame(all_items)
-                    st.dataframe(batch_df, use_container_width=True)
-                    if not batch_df.empty:
-                        st.bar_chart(batch_df["malicious"].value_counts())
-                    st.download_button(
-                        label="下载批量检测结果 CSV",
-                        data=batch_df.to_csv(index=False).encode("utf-8"),
-                        file_name="batch_detect_result.csv",
-                        mime="text/csv",
-                    )
+                    st.session_state.batch_detect_result = batch_df
                 except Exception as exc:
                     st.error(f"批量检测失败：{exc}")
+        if isinstance(st.session_state.batch_detect_result, pd.DataFrame):
+            st.info("已恢复上次批量文本检测结果")
+            st.dataframe(st.session_state.batch_detect_result, use_container_width=True)
+            if not st.session_state.batch_detect_result.empty:
+                st.bar_chart(st.session_state.batch_detect_result["malicious"].value_counts())
+            st.download_button(
+                label="下载批量检测结果 CSV",
+                data=st.session_state.batch_detect_result.to_csv(index=False).encode("utf-8"),
+                file_name="batch_detect_result.csv",
+                mime="text/csv",
+            )
 
     with detect_tabs[2]:
         uploaded = st.file_uploader("上传包含 URL 的 CSV 文件（需含 url 列）", type=["csv"])
@@ -244,16 +268,19 @@ with main_tabs[0]:
                             all_items.extend(resp.json().get("items", []))
 
                         result_df = pd.DataFrame(all_items)
+                        st.session_state.csv_detect_result = result_df
                         st.success(f"CSV 检测完成，共 {len(result_df)} 条")
-                        st.dataframe(result_df, use_container_width=True)
-                        st.download_button(
-                            label="下载 CSV 检测结果",
-                            data=result_df.to_csv(index=False).encode("utf-8"),
-                            file_name="uploaded_urls_detect_result.csv",
-                            mime="text/csv",
-                        )
             except Exception as exc:
                 st.error(f"CSV 检测失败：{exc}")
+        if isinstance(st.session_state.csv_detect_result, pd.DataFrame):
+            st.info("已恢复上次 CSV 检测结果")
+            st.dataframe(st.session_state.csv_detect_result, use_container_width=True)
+            st.download_button(
+                label="下载 CSV 检测结果",
+                data=st.session_state.csv_detect_result.to_csv(index=False).encode("utf-8"),
+                file_name="uploaded_urls_detect_result.csv",
+                mime="text/csv",
+            )
 
 with main_tabs[1]:
     st.header("网站 URL 批量采集（用于训练/检测）")
@@ -275,7 +302,9 @@ with main_tabs[1]:
         )
 
         if urls:
+            st.session_state.collected_errors = errors
             collect_df = pd.DataFrame({"url": urls})
+            st.session_state.collected_urls_result = collect_df
             st.success(f"采集完成，共 {len(collect_df)} 条 URL")
             st.dataframe(collect_df, use_container_width=True)
 
@@ -315,6 +344,7 @@ with main_tabs[1]:
                         all_items.extend(resp.json().get("items", []))
 
                     detect_df = pd.DataFrame(all_items)
+                    st.session_state.collected_detect_result = detect_df
                     st.subheader("采集 URL 检测结果")
                     st.dataframe(detect_df, use_container_width=True)
                     st.download_button(
@@ -325,10 +355,15 @@ with main_tabs[1]:
                     )
                 except Exception as exc:
                     st.error(f"采集 URL 批量检测失败：{exc}")
-
-        if errors:
-            st.warning("部分页面抓取失败，可忽略非关键页面")
-            st.code("\n".join(errors[:20]))
+    if isinstance(st.session_state.collected_urls_result, pd.DataFrame):
+        st.info("已恢复上次采集结果")
+        st.dataframe(st.session_state.collected_urls_result, use_container_width=True)
+    if isinstance(st.session_state.collected_detect_result, pd.DataFrame):
+        st.info("已恢复上次采集URL检测结果")
+        st.dataframe(st.session_state.collected_detect_result, use_container_width=True)
+    if st.session_state.collected_errors:
+        st.warning("部分页面抓取失败，可忽略非关键页面")
+        st.code("\n".join(st.session_state.collected_errors[:20]))
 
 with main_tabs[2]:
     st.header("在线 API 预测监控")
