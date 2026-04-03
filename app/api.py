@@ -12,6 +12,7 @@ import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.features import normalize_url
 from app.modeling import train_model
 from app.storage import init_db, insert_prediction
 
@@ -83,6 +84,8 @@ class ModelInfo(BaseModel):
     model_type: str
     threshold: float
     target_fpr: float
+    feature_version: str
+    trained_at_utc: str
 
 
 @lru_cache(maxsize=1)
@@ -122,13 +125,14 @@ def predict(req: PredictRequest):
 
     threshold = THRESHOLD if THRESHOLD > 0 else float(meta.get("threshold", 0.5))
     t0 = time.time()
-    score = float(model.predict_proba([req.url])[0][1])
+    normalized_url = normalize_url(req.url)
+    score = float(model.predict_proba([normalized_url])[0][1])
     malicious = score >= threshold
     latency_ms = (time.time() - t0) * 1000.0
 
     insert_prediction(
         DB_PATH,
-        url=req.url,
+        url=normalized_url,
         score=score,
         malicious=malicious,
         model_version=MODEL_VERSION,
@@ -151,10 +155,11 @@ def predict_batch(req: BatchRequest):
     meta = bundle.get("meta", {})
     threshold = THRESHOLD if THRESHOLD > 0 else float(meta.get("threshold", 0.5))
 
-    probs = model.predict_proba(req.urls)[:, 1].tolist()
+    normalized_urls = [normalize_url(url) for url in req.urls]
+    probs = model.predict_proba(normalized_urls)[:, 1].tolist()
     items = [
         BatchItem(url=url, malicious=(float(prob) >= threshold), score=float(prob))
-        for url, prob in zip(req.urls, probs)
+        for url, prob in zip(normalized_urls, probs)
     ]
     return BatchResponse(items=items, model_version=MODEL_VERSION)
 
@@ -172,4 +177,6 @@ def model_info():
         model_type=str(meta.get("model_type", "legacy")),
         threshold=threshold,
         target_fpr=float(meta.get("target_fpr", 0.01)),
+        feature_version=str(meta.get("feature_version", "unknown")),
+        trained_at_utc=str(meta.get("trained_at_utc", "unknown")),
     )

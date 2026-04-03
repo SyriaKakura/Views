@@ -274,7 +274,7 @@ else:
         col1, col2, col3 = st.columns(3)
         col1.metric("总样本数", len(df))
         col2.metric("恶意判定占比", f"{(df['malicious'].mean() * 100):.2f}%")
-        col3.metric("平均延迟(ms)", f"{df['latency_ms'].mean():.2f}")
+        col3.metric("P95 延迟(ms)", f"{df['latency_ms'].quantile(0.95):.2f}")
 
         st.subheader("延迟趋势")
         st.line_chart(df.sort_values("ts").set_index("ts")["latency_ms"])

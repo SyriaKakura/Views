@@ -11,6 +11,7 @@ from urllib.parse import urlsplit
 import numpy as np
 import pandas as pd
 
+from app.data_prep import prepare_dataset
 from app.modeling import evaluate_binary, threshold_at_fpr, train_model
 
 
@@ -35,14 +36,15 @@ def _infer_source(url: str) -> str:
 
 
 def _prepare_dataframe(df: pd.DataFrame, source_col: str, time_col: str) -> pd.DataFrame:
-    out = df.copy()
+    prepared = prepare_dataset(df, source_col=source_col, ts_col=time_col, deduplicate=True)
+    out = prepared.frame
     if source_col not in out.columns:
         out[source_col] = out["url"].astype(str).map(_infer_source)
 
     if time_col in out.columns:
         out[time_col] = pd.to_datetime(out[time_col], errors="coerce")
         out = out.sort_values(time_col).reset_index(drop=True)
-        out["_time_key"] = out[time_col].fillna(method="ffill").fillna(method="bfill")
+        out["_time_key"] = out[time_col].ffill().bfill()
     else:
         out["_time_key"] = pd.date_range("2025-01-01", periods=len(out), freq="h")
 
