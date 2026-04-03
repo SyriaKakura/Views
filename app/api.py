@@ -242,6 +242,20 @@ def health_check():
     }
 
 
+@app.get("/health")
+def health_check():
+    try:
+        bundle = get_model_bundle()
+        loaded = bool(bundle.get("pipeline") is not None)
+    except Exception:
+        loaded = False
+    return {
+        "status": "healthy",
+        "model_loaded": loaded,
+        "model_version": MODEL_VERSION,
+    }
+
+
 @app.get("/api/v1/model_info", response_model=ModelInfo)
 def model_info():
     if not os.path.exists(MODEL_PATH):
