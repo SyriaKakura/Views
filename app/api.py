@@ -5,17 +5,49 @@ from __future__ import annotations
 import os
 import time
 from functools import lru_cache
+from pathlib import Path
 
 import joblib
+import pandas as pd
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
 
+from app.modeling import train_model
 from app.storage import init_db, insert_prediction
 
 MODEL_PATH = os.getenv("MODEL_PATH", "artifacts/url_detector.joblib")
 MODEL_VERSION = os.getenv("MODEL_VERSION", "v2.0-logistic-lightgbm")
 THRESHOLD = float(os.getenv("THRESHOLD", "-1"))
 DB_PATH = os.getenv("DB_PATH", "artifacts/predictions.db")
+AUTO_TRAIN_ON_MISSING_MODEL = os.getenv("AUTO_TRAIN_ON_MISSING_MODEL", "1") not in {
+    "0",
+    "false",
+    "False",
+}
+BOOTSTRAP_DATA_PATH = os.getenv("BOOTSTRAP_DATA_PATH", "data/sample_urls.csv")
+
+
+def _bootstrap_model_if_needed() -> None:
+    if os.path.exists(MODEL_PATH):
+        return
+    if not AUTO_TRAIN_ON_MISSING_MODEL:
+        return
+    if not os.path.exists(BOOTSTRAP_DATA_PATH):
+        raise FileNotFoundError(
+            f"model not found: {MODEL_PATH}; bootstrap dataset not found: {BOOTSTRAP_DATA_PATH}"
+        )
+
+    df = pd.read_csv(BOOTSTRAP_DATA_PATH)
+    if not {"url", "label"}.issubset(df.columns):
+        raise ValueError("Bootstrap dataset must contain columns: url,label")
+
+    Path(MODEL_PATH).parent.mkdir(parents=True, exist_ok=True)
+    train_model(
+        urls=df["url"].astype(str).tolist(),
+        labels=df["label"].astype(int).tolist(),
+        model_type="logistic",
+        model_path=MODEL_PATH,
+    )
 
 
 class PredictRequest(BaseModel):
@@ -78,6 +110,7 @@ app = FastAPI(title="Malicious URL Detector", version="2.0.0")
 @app.on_event("startup")
 def startup_event() -> None:
     init_db(DB_PATH)
+    _bootstrap_model_if_needed()
     get_model_bundle()
 
 
