@@ -4,10 +4,12 @@
 - URL 文本特征 + 结构特征
 - TF-IDF（char n-gram）
 - 双模型训练（Logistic / LightGBM）
+- 训练前数据清洗（URL 规范化、去重、时间排序）
 - FastAPI 在线服务
 - Streamlit 仪表盘
 - 跨源泛化/时间漂移/固定低 FPR 点 TPR 对比实验
 - 误报分析与再训练闭环
+- 预测日志隐私保护（默认去 query + SHA256 摘要）
 
 ## 1. 安装依赖
 
@@ -41,6 +43,12 @@ uvicorn app.api:app --host 0.0.0.0 --port 8000
 - `POST /api/v1/predict`
 - `POST /api/v1/predict_batch`
 - `GET /api/v1/model_info`
+
+`/api/v1/model_info` 返回：
+- 模型类型
+- 阈值与目标 FPR
+- 特征版本
+- 训练时间（UTC）
 
 ## 4. 系统性实验（跨源 + 时间切分 + 固定低 FPR）
 

@@ -2,8 +2,8 @@ fastapi==0.118.0
 uvicorn==0.37.0
 pydantic==2.11.9
 scikit-learn==1.7.2
-numpy==2.3.3
-pandas==2.3.2
+numpy==2.2.6
+pandas==2.2.3
 joblib==1.5.2
 streamlit==1.49.1
 lightgbm==4.6.0

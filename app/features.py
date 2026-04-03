@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import re
-from urllib.parse import unquote, urlsplit
+from urllib.parse import parse_qsl, urlencode, unquote, urlsplit
 
 SPECIAL_CHARS = r"@?=&#%+-_:.~/"
 
@@ -13,7 +13,7 @@ _IP_HOST_RE = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 _DEFAULT_PORT_RE = re.compile(r":(80|443)$")
 
 
-def normalize_url(url: str) -> str:
+def normalize_url(url: str, *, strip_query: bool = False) -> str:
     """Normalize URL for deduplication and stable feature extraction."""
     value = (url or "").strip()
     value = unquote(value)
@@ -30,11 +30,21 @@ def normalize_url(url: str) -> str:
 
     path = (parts.path or "/").rstrip("/") or "/"
     query = parts.query or ""
+    if query and not strip_query:
+        query_pairs = parse_qsl(query, keep_blank_values=True)
+        query = urlencode(sorted(query_pairs), doseq=True)
+    elif strip_query:
+        query = ""
 
     rebuilt = f"{parts.scheme.lower()}://{netloc}{path}"
     if query:
         rebuilt += f"?{query}"
     return rebuilt
+
+
+def redact_query(url: str) -> str:
+    """Remove URL query string for privacy-friendly logging."""
+    return normalize_url(url, strip_query=True)
 
 
 def url_struct_features(url: str) -> dict[str, float]:

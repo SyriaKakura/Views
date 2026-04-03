@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any, Sequence
 
@@ -104,7 +105,7 @@ def build_pipeline(model_type: str = "logistic", max_features: int = 200000) -> 
 
 def evaluate_binary(y_true: Sequence[int], probas: np.ndarray, threshold: float = 0.5) -> dict[str, float]:
     preds = (probas >= threshold).astype(int)
-    tn, fp, fn, tp = confusion_matrix(y_true, preds).ravel()
+    tn, fp, fn, tp = confusion_matrix(y_true, preds, labels=[0, 1]).ravel()
     return {
         "accuracy": float(accuracy_score(y_true, preds)),
         "precision": float(precision_score(y_true, preds, zero_division=0)),
@@ -169,6 +170,10 @@ def train_model(
             "model_type": model_type,
             "target_fpr": target_fpr,
             "threshold": low_fpr_threshold,
+            "feature_version": "tfidf_char_3_5_plus_struct_v2",
+            "trained_at_utc": datetime.now(timezone.utc).isoformat(),
+            "train_samples": len(x_train),
+            "test_samples": len(x_test),
         },
     }
 
