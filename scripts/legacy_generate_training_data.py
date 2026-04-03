@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from url_detector import MaliciousURLDetector
+from app.legacy.detector import MaliciousURLDetector
 import random
 import time
 from datetime import datetime, timedelta
@@ -148,7 +148,7 @@ def create_training_dataset():
     df = df[columns]
     
     # 保存数据集
-    filename = 'malicious_url_training_data.csv'
+    filename = 'data/legacy/malicious_url_training_data.csv'
     df.to_csv(filename, index=False)
     
     print(f"\n训练数据集已保存到: {filename}")
@@ -271,7 +271,7 @@ def create_enhanced_training_dataset():
     df = df[columns]
     
     # 保存数据集
-    filename = 'enhanced_malicious_url_training_data.csv'
+    filename = 'data/legacy/enhanced_malicious_url_training_data.csv'
     df.to_csv(filename, index=False)
     
     print(f"\n增强训练数据集已保存到: {filename}")

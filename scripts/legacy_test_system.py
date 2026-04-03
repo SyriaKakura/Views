@@ -1,7 +1,7 @@
 import requests
 import json
 import time
-from url_detector import MaliciousURLDetector
+from app.legacy.detector import MaliciousURLDetector
 import pandas as pd
 
 class MaliciousURLTester:

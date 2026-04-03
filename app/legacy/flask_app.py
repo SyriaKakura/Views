@@ -1,7 +1,7 @@
 from flask import Flask, request, jsonify, render_template
 from flask_cors import CORS
 import json
-from url_detector import MaliciousURLDetector
+from app.legacy.detector import MaliciousURLDetector
 import logging
 from datetime import datetime
 import os
@@ -10,7 +10,7 @@ import os
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-app = Flask(__name__)
+app = Flask(__name__, template_folder="../../templates")
 CORS(app)
 
 # 全局检测器实例
@@ -19,15 +19,15 @@ detector = None
 @app.route('/')
 def index():
     """主页 - 显示恶意URL检测界面"""
-    return render_template('index.html')
+    return render_template('legacy_index.html')
 
 def init_detector():
     """初始化检测器"""
     global detector
     try:
         # 尝试加载预训练模型
-        if os.path.exists('malicious_url_model.pkl'):
-            detector = MaliciousURLDetector('malicious_url_model.pkl')
+        if os.path.exists('artifacts/legacy_models/malicious_url_model.pkl'):
+            detector = MaliciousURLDetector('artifacts/legacy_models/malicious_url_model.pkl')
             logger.info("预训练模型加载成功")
         else:
             detector = MaliciousURLDetector()
