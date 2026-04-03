@@ -126,231 +126,325 @@ def chunked(values: Iterable[str], batch_size: int) -> Iterable[list[str]]:
         yield batch
 
 
+def parse_url_lines(raw_text: str) -> tuple[list[str], list[str]]:
+    raw_urls = [line.strip() for line in raw_text.splitlines() if line.strip()]
+    valid_urls: list[str] = []
+    invalid_urls: list[str] = []
+    for raw in raw_urls:
+        normalized = normalize_http_url(raw)
+        if normalized:
+            valid_urls.append(normalized)
+        else:
+            invalid_urls.append(raw)
+    return valid_urls, invalid_urls
+
+
+def render_detection_result(data: dict) -> None:
+    score = float(data.get("score", 0.0))
+    malicious = bool(data.get("malicious", False))
+    risk = "高风险" if malicious else "低风险"
+
+    a, b, c = st.columns(3)
+    a.metric("恶意判定", "是" if malicious else "否")
+    b.metric("风险分", f"{score:.4f}")
+    c.metric("风险等级", risk)
+
+    st.progress(min(max(score, 0.0), 1.0), text=f"风险分进度: {score:.2%}")
+    st.json(data)
+
+
 st.set_page_config(page_title="Malicious URL Detector Dashboard", layout="wide")
-st.title("恶意 URL 检测闭环仪表盘")
+st.title("恶意 URL 检测可视化平台")
+st.caption("支持单条 / 多条 URL 检测，并提供模型训练优化对比图。")
 
-st.header("可视化 URL 检测")
-with st.expander("单条 URL 检测", expanded=True):
-    single_url = st.text_input("输入要检测的 URL", placeholder="https://example.com/path")
-    if st.button("检测单条 URL"):
-        candidate = normalize_http_url(single_url or "")
-        if not candidate:
-            st.error("URL 格式无效，请输入 http/https 地址")
-        else:
-            try:
-                import requests
+main_tabs = st.tabs(["URL 检测", "URL 采集", "在线监控", "模型训练优化对比"])
 
-                resp = requests.post(f"{API_BASE_URL}/api/v1/predict", json={"url": candidate}, timeout=8)
-                resp.raise_for_status()
-                data = resp.json()
-                st.success("检测完成")
-                st.json(data)
-            except Exception as exc:
-                st.error(f"调用检测接口失败：{exc}")
+with main_tabs[0]:
+    st.header("单条与批量 URL 恶意检测")
+    detect_tabs = st.tabs(["单条检测", "多条检测（文本）", "多条检测（CSV）"])
 
-with st.expander("批量 URL 检测", expanded=True):
-    batch_input = st.text_area(
-        "每行一个 URL",
-        placeholder="https://a.com\nhttps://b.com/login",
-        height=140,
-    )
-    if st.button("检测批量 URL"):
-        raw_urls = [line.strip() for line in batch_input.splitlines() if line.strip()]
-        urls = [u for u in (normalize_http_url(item) for item in raw_urls) if u]
+    with detect_tabs[0]:
+        single_url = st.text_input("输入要检测的 URL", placeholder="https://example.com/path")
+        if st.button("检测单条 URL"):
+            candidate = normalize_http_url(single_url or "")
+            if not candidate:
+                st.error("URL 格式无效，请输入 http/https 地址")
+            else:
+                try:
+                    import requests
 
-        if not urls:
-            st.warning("没有可检测的有效 URL")
-        else:
-            try:
-                import requests
-
-                all_items = []
-                for group in chunked(urls, 200):
-                    resp = requests.post(
-                        f"{API_BASE_URL}/api/v1/predict_batch",
-                        json={"urls": group},
-                        timeout=12,
-                    )
+                    resp = requests.post(f"{API_BASE_URL}/api/v1/predict", json={"url": candidate}, timeout=8)
                     resp.raise_for_status()
-                    all_items.extend(resp.json().get("items", []))
+                    st.success("检测完成")
+                    render_detection_result(resp.json())
+                except Exception as exc:
+                    st.error(f"调用检测接口失败：{exc}")
 
-                batch_df = pd.DataFrame(all_items)
-                st.dataframe(batch_df, use_container_width=True)
-                st.download_button(
-                    label="下载批量检测结果 CSV",
-                    data=batch_df.to_csv(index=False).encode("utf-8"),
-                    file_name="batch_detect_result.csv",
-                    mime="text/csv",
-                )
-            except Exception as exc:
-                st.error(f"批量检测失败：{exc}")
-
-st.header("网站 URL 批量采集（用于训练/检测）")
-col_a, col_b, col_c = st.columns([4, 2, 2])
-with col_a:
-    seed_url = st.text_input("种子网站 URL", placeholder="https://example.com")
-with col_b:
-    max_urls = st.number_input("最多采集数量", min_value=10, max_value=5000, value=200, step=10)
-with col_c:
-    max_depth = st.slider("采集深度", min_value=0, max_value=2, value=1)
-same_domain_only = st.checkbox("仅采集同域名 URL", value=True)
-
-if st.button("开始采集 URL"):
-    urls, errors = crawl_urls(
-        seed_url=seed_url,
-        max_urls=int(max_urls),
-        same_domain_only=same_domain_only,
-        max_depth=max_depth,
-    )
-
-    if urls:
-        collect_df = pd.DataFrame({"url": urls})
-        st.success(f"采集完成，共 {len(collect_df)} 条 URL")
-        st.dataframe(collect_df, use_container_width=True)
-
-        default_label = st.selectbox(
-            "导出训练样本时的默认标签（0=正常，1=恶意）",
-            options=[0, 1],
-            index=0,
+    with detect_tabs[1]:
+        batch_input = st.text_area(
+            "每行一个 URL",
+            placeholder="https://a.com\nhttps://b.com/login",
+            height=160,
         )
-        train_df = collect_df.copy()
-        train_df["label"] = int(default_label)
+        if st.button("检测多条 URL"):
+            urls, invalid_urls = parse_url_lines(batch_input)
+            if invalid_urls:
+                st.warning(f"已忽略 {len(invalid_urls)} 条无效 URL")
+            if not urls:
+                st.warning("没有可检测的有效 URL")
+            else:
+                try:
+                    import requests
 
-        st.download_button(
-            label="下载采集 URL（仅 URL）",
-            data=collect_df.to_csv(index=False).encode("utf-8"),
-            file_name="collected_urls.csv",
-            mime="text/csv",
-        )
-        st.download_button(
-            label="下载训练文件（url,label）",
-            data=train_df.to_csv(index=False).encode("utf-8"),
-            file_name="collected_urls_for_train.csv",
-            mime="text/csv",
-        )
+                    all_items = []
+                    for group in chunked(urls, 200):
+                        resp = requests.post(
+                            f"{API_BASE_URL}/api/v1/predict_batch",
+                            json={"urls": group},
+                            timeout=12,
+                        )
+                        resp.raise_for_status()
+                        all_items.extend(resp.json().get("items", []))
 
-        if st.button("对采集 URL 立即执行批量检测"):
-            try:
-                import requests
-
-                all_items = []
-                for group in chunked(collect_df["url"].tolist(), 200):
-                    resp = requests.post(
-                        f"{API_BASE_URL}/api/v1/predict_batch",
-                        json={"urls": group},
-                        timeout=12,
+                    batch_df = pd.DataFrame(all_items)
+                    st.dataframe(batch_df, use_container_width=True)
+                    if not batch_df.empty:
+                        st.bar_chart(batch_df["malicious"].value_counts())
+                    st.download_button(
+                        label="下载批量检测结果 CSV",
+                        data=batch_df.to_csv(index=False).encode("utf-8"),
+                        file_name="batch_detect_result.csv",
+                        mime="text/csv",
                     )
-                    resp.raise_for_status()
-                    all_items.extend(resp.json().get("items", []))
+                except Exception as exc:
+                    st.error(f"批量检测失败：{exc}")
 
-                detect_df = pd.DataFrame(all_items)
-                st.subheader("采集 URL 检测结果")
-                st.dataframe(detect_df, use_container_width=True)
-                st.download_button(
-                    label="下载采集 URL 检测结果",
-                    data=detect_df.to_csv(index=False).encode("utf-8"),
-                    file_name="collected_urls_detected.csv",
-                    mime="text/csv",
-                )
+    with detect_tabs[2]:
+        uploaded = st.file_uploader("上传包含 URL 的 CSV 文件（需含 url 列）", type=["csv"])
+        if uploaded is not None and st.button("检测上传 CSV"):
+            try:
+                csv_df = pd.read_csv(uploaded)
+                if "url" not in csv_df.columns:
+                    st.error("CSV 必须包含 url 列")
+                else:
+                    urls = [u for u in (normalize_http_url(str(v)) for v in csv_df["url"].tolist()) if u]
+                    if not urls:
+                        st.warning("CSV 中没有有效 URL")
+                    else:
+                        import requests
+
+                        all_items = []
+                        for group in chunked(urls, 200):
+                            resp = requests.post(
+                                f"{API_BASE_URL}/api/v1/predict_batch",
+                                json={"urls": group},
+                                timeout=12,
+                            )
+                            resp.raise_for_status()
+                            all_items.extend(resp.json().get("items", []))
+
+                        result_df = pd.DataFrame(all_items)
+                        st.success(f"CSV 检测完成，共 {len(result_df)} 条")
+                        st.dataframe(result_df, use_container_width=True)
+                        st.download_button(
+                            label="下载 CSV 检测结果",
+                            data=result_df.to_csv(index=False).encode("utf-8"),
+                            file_name="uploaded_urls_detect_result.csv",
+                            mime="text/csv",
+                        )
             except Exception as exc:
-                st.error(f"采集 URL 批量检测失败：{exc}")
+                st.error(f"CSV 检测失败：{exc}")
 
-    if errors:
-        st.warning("部分页面抓取失败，可忽略非关键页面")
-        st.code("\n".join(errors[:20]))
+with main_tabs[1]:
+    st.header("网站 URL 批量采集（用于训练/检测）")
+    col_a, col_b, col_c = st.columns([4, 2, 2])
+    with col_a:
+        seed_url = st.text_input("种子网站 URL", placeholder="https://example.com")
+    with col_b:
+        max_urls = st.number_input("最多采集数量", min_value=10, max_value=5000, value=200, step=10)
+    with col_c:
+        max_depth = st.slider("采集深度", min_value=0, max_value=2, value=1)
+    same_domain_only = st.checkbox("仅采集同域名 URL", value=True)
 
-st.header("在线 API 预测监控")
-if not os.path.exists(DB_PATH):
-    st.warning(f"数据库不存在：{DB_PATH}")
-else:
-    query = "SELECT ts, url, score, malicious, model_version, latency_ms FROM predictions ORDER BY id DESC LIMIT 5000"
-    df = pd.read_sql_query(query, sqlite3.connect(DB_PATH))
-
-    if df.empty:
-        st.info("暂无预测数据")
-    else:
-        df["ts"] = pd.to_datetime(df["ts"])
-
-        col1, col2, col3 = st.columns(3)
-        col1.metric("总样本数", len(df))
-        col2.metric("恶意判定占比", f"{(df['malicious'].mean() * 100):.2f}%")
-        col3.metric("P95 延迟(ms)", f"{df['latency_ms'].quantile(0.95):.2f}")
-
-        st.subheader("延迟趋势")
-        st.line_chart(df.sort_values("ts").set_index("ts")["latency_ms"])
-
-        st.subheader("分数分布")
-        st.bar_chart(df["score"].round(1).value_counts().sort_index())
-
-        st.subheader("最近预测样本")
-        st.dataframe(df.head(200), use_container_width=True)
-
-st.header("离线实验：跨源泛化 / 漂移 / 低误报阈值")
-if not os.path.exists(EXPERIMENT_PATH):
-    st.info(f"实验报告不存在：{EXPERIMENT_PATH}")
-else:
-    with open(EXPERIMENT_PATH, "r", encoding="utf-8") as f:
-        report = json.load(f)
-
-    setup = report.get("setup", {})
-    st.caption(
-        f"目标 FPR={setup.get('target_fpr')} | 时间切分训练比例={setup.get('train_ratio')} | "
-        f"Train={setup.get('train_samples')} | Test={setup.get('test_samples')}"
-    )
-
-    model_rows = []
-    source_rows = []
-    for model_type, content in report.get("models", {}).items():
-        future = content.get("future_window_metrics", {})
-        model_rows.append(
-            {
-                "model_type": model_type,
-                "threshold": content.get("threshold_at_target_fpr"),
-                "TPR": future.get("tpr"),
-                "FPR": future.get("fpr"),
-                "ROC-AUC": future.get("roc_auc"),
-                "PSI(train->test)": content.get("drift", {}).get("psi_scores_train_vs_test"),
-            }
+    if st.button("开始采集 URL"):
+        urls, errors = crawl_urls(
+            seed_url=seed_url,
+            max_urls=int(max_urls),
+            same_domain_only=same_domain_only,
+            max_depth=max_depth,
         )
-        for source, score in content.get("source_tpr_compare", {}).items():
-            source_rows.append(
-                {
-                    "model_type": model_type,
-                    "source": source,
-                    "TPR": score.get("tpr"),
-                    "FPR": score.get("fpr"),
-                    "support": score.get("support"),
-                }
+
+        if urls:
+            collect_df = pd.DataFrame({"url": urls})
+            st.success(f"采集完成，共 {len(collect_df)} 条 URL")
+            st.dataframe(collect_df, use_container_width=True)
+
+            default_label = st.selectbox(
+                "导出训练样本时的默认标签（0=正常，1=恶意）",
+                options=[0, 1],
+                index=0,
+            )
+            train_df = collect_df.copy()
+            train_df["label"] = int(default_label)
+
+            st.download_button(
+                label="下载采集 URL（仅 URL）",
+                data=collect_df.to_csv(index=False).encode("utf-8"),
+                file_name="collected_urls.csv",
+                mime="text/csv",
+            )
+            st.download_button(
+                label="下载训练文件（url,label）",
+                data=train_df.to_csv(index=False).encode("utf-8"),
+                file_name="collected_urls_for_train.csv",
+                mime="text/csv",
             )
 
-    if model_rows:
-        st.subheader("固定低 FPR 点的整体对比")
-        st.dataframe(pd.DataFrame(model_rows), use_container_width=True)
+            if st.button("对采集 URL 立即执行批量检测"):
+                try:
+                    import requests
 
-    if source_rows:
-        st.subheader("跨来源 TPR/FPR 对比")
-        src_df = pd.DataFrame(source_rows)
-        st.dataframe(src_df, use_container_width=True)
-        st.bar_chart(src_df.pivot(index="source", columns="model_type", values="TPR"))
+                    all_items = []
+                    for group in chunked(collect_df["url"].tolist(), 200):
+                        resp = requests.post(
+                            f"{API_BASE_URL}/api/v1/predict_batch",
+                            json={"urls": group},
+                            timeout=12,
+                        )
+                        resp.raise_for_status()
+                        all_items.extend(resp.json().get("items", []))
 
-    fp_rows = []
-    for model_type, content in report.get("models", {}).items():
-        for item in content.get("false_positive_samples", []):
-            fp_rows.append({"model_type": model_type, **item})
+                    detect_df = pd.DataFrame(all_items)
+                    st.subheader("采集 URL 检测结果")
+                    st.dataframe(detect_df, use_container_width=True)
+                    st.download_button(
+                        label="下载采集 URL 检测结果",
+                        data=detect_df.to_csv(index=False).encode("utf-8"),
+                        file_name="collected_urls_detected.csv",
+                        mime="text/csv",
+                    )
+                except Exception as exc:
+                    st.error(f"采集 URL 批量检测失败：{exc}")
 
-    if fp_rows:
-        st.subheader("误报样本分析（Top by score）")
-        st.dataframe(pd.DataFrame(fp_rows), use_container_width=True)
+        if errors:
+            st.warning("部分页面抓取失败，可忽略非关键页面")
+            st.code("\n".join(errors[:20]))
 
-    retrain = report.get("retrain_loop", {})
-    if retrain:
-        st.subheader("再训练闭环效果")
-        st.write(
-            {
-                "hard_negative_count": retrain.get("hard_negative_count"),
-                "baseline_tpr": retrain.get("baseline", {}).get("tpr"),
-                "baseline_fpr": retrain.get("baseline", {}).get("fpr"),
-                "retrained_tpr": retrain.get("retrained", {}).get("tpr"),
-                "retrained_fpr": retrain.get("retrained", {}).get("fpr"),
-            }
+with main_tabs[2]:
+    st.header("在线 API 预测监控")
+    if not os.path.exists(DB_PATH):
+        st.warning(f"数据库不存在：{DB_PATH}")
+    else:
+        query = "SELECT ts, url, score, malicious, model_version, latency_ms FROM predictions ORDER BY id DESC LIMIT 5000"
+        df = pd.read_sql_query(query, sqlite3.connect(DB_PATH))
+
+        if df.empty:
+            st.info("暂无预测数据")
+        else:
+            df["ts"] = pd.to_datetime(df["ts"])
+
+            col1, col2, col3 = st.columns(3)
+            col1.metric("总样本数", len(df))
+            col2.metric("恶意判定占比", f"{(df['malicious'].mean() * 100):.2f}%")
+            col3.metric("P95 延迟(ms)", f"{df['latency_ms'].quantile(0.95):.2f}")
+
+            st.subheader("延迟趋势")
+            st.line_chart(df.sort_values("ts").set_index("ts")["latency_ms"])
+
+            st.subheader("分数分布")
+            st.bar_chart(df["score"].round(1).value_counts().sort_index())
+
+            st.subheader("最近预测样本")
+            st.dataframe(df.head(200), use_container_width=True)
+
+with main_tabs[3]:
+    st.header("模型训练优化对比图")
+    if not os.path.exists(EXPERIMENT_PATH):
+        st.info(f"实验报告不存在：{EXPERIMENT_PATH}")
+    else:
+        with open(EXPERIMENT_PATH, "r", encoding="utf-8") as f:
+            report = json.load(f)
+
+        setup = report.get("setup", {})
+        st.caption(
+            f"目标 FPR={setup.get('target_fpr')} | 时间切分训练比例={setup.get('train_ratio')} | "
+            f"Train={setup.get('train_samples')} | Test={setup.get('test_samples')}"
         )
+
+        model_rows = []
+        source_rows = []
+        train_metric_rows = []
+        for model_type, content in report.get("models", {}).items():
+            future = content.get("future_window_metrics", {})
+            train_metrics = content.get("train_metrics", {})
+            model_rows.append(
+                {
+                    "model_type": model_type,
+                    "threshold": content.get("threshold_at_target_fpr"),
+                    "TPR": future.get("tpr"),
+                    "FPR": future.get("fpr"),
+                    "ROC-AUC": future.get("roc_auc"),
+                    "PSI(train->test)": content.get("drift", {}).get("psi_scores_train_vs_test"),
+                }
+            )
+            for metric_name in ["precision", "recall", "f1", "roc_auc"]:
+                if metric_name in train_metrics:
+                    train_metric_rows.append(
+                        {
+                            "model_type": model_type,
+                            "metric": metric_name,
+                            "value": train_metrics.get(metric_name),
+                        }
+                    )
+
+            for source, score in content.get("source_tpr_compare", {}).items():
+                source_rows.append(
+                    {
+                        "model_type": model_type,
+                        "source": source,
+                        "TPR": score.get("tpr"),
+                        "FPR": score.get("fpr"),
+                        "support": score.get("support"),
+                    }
+                )
+
+        if model_rows:
+            model_df = pd.DataFrame(model_rows)
+            st.subheader("固定低 FPR 点整体表现")
+            st.dataframe(model_df, use_container_width=True)
+            st.bar_chart(model_df.set_index("model_type")[["TPR", "ROC-AUC"]])
+
+        if train_metric_rows:
+            st.subheader("训练指标对比（模型优化）")
+            train_metric_df = pd.DataFrame(train_metric_rows)
+            pivot_df = train_metric_df.pivot(index="metric", columns="model_type", values="value")
+            st.dataframe(pivot_df, use_container_width=True)
+            st.bar_chart(pivot_df)
+
+        if source_rows:
+            st.subheader("跨来源 TPR/FPR 对比")
+            src_df = pd.DataFrame(source_rows)
+            st.dataframe(src_df, use_container_width=True)
+            st.bar_chart(src_df.pivot(index="source", columns="model_type", values="TPR"))
+
+        fp_rows = []
+        for model_type, content in report.get("models", {}).items():
+            for item in content.get("false_positive_samples", []):
+                fp_rows.append({"model_type": model_type, **item})
+
+        if fp_rows:
+            st.subheader("误报样本分析（Top by score）")
+            st.dataframe(pd.DataFrame(fp_rows), use_container_width=True)
+
+        retrain = report.get("retrain_loop", {})
+        if retrain:
+            st.subheader("再训练闭环前后对比")
+            retrain_cmp = pd.DataFrame(
+                [
+                    {"阶段": "baseline", "TPR": retrain.get("baseline", {}).get("tpr"), "FPR": retrain.get("baseline", {}).get("fpr")},
+                    {"阶段": "retrained", "TPR": retrain.get("retrained", {}).get("tpr"), "FPR": retrain.get("retrained", {}).get("fpr")},
+                ]
+            ).set_index("阶段")
+            st.write({"hard_negative_count": retrain.get("hard_negative_count")})
+            st.dataframe(retrain_cmp, use_container_width=True)
+            st.bar_chart(retrain_cmp)

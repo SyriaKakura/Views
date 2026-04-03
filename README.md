@@ -71,11 +71,13 @@ streamlit run dashboard.py
 
 仪表盘同时展示：
 - API 在线预测监控
+- 可视化单条 URL 检测（分数/风险等级/判定）
+- 可视化多条 URL 检测（文本输入与 CSV 上传）
 - 实验报告中的跨源泛化结果
+- 模型训练优化对比图（Logistic vs LightGBM 训练指标、TPR/ROC-AUC、再训练闭环对比）
 - 漂移指标（PSI）
 - 误报样本
 - 再训练闭环前后对比
-- 可视化单条/批量 URL 检测（直接调用 API）
 - 从种子网站批量采集 URL，并导出为检测或训练数据（`url,label`）
 
 ## 6. Docker Compose（可选）
