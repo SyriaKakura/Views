@@ -30,6 +30,17 @@ LightGBM：
 python -m app.train --input data/sample_urls.csv --model-type lightgbm --model-path artifacts/url_detector.joblib
 ```
 
+多来源训练（可混合多个 `--input`、`--input-glob`、`--input-dir`）：
+```bash
+python -m app.train \
+  --input data/sample_urls.csv \
+  --input data/experiment_urls.csv \
+  --input-dir data \
+  --input-glob "data/*.csv" \
+  --model-type lightgbm \
+  --model-path artifacts/url_detector.joblib
+```
+
 输出：
 - `artifacts/url_detector.joblib`
 - `artifacts/train_metrics.json`
