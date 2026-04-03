@@ -52,17 +52,23 @@ def normalize_http_url(url: str) -> str | None:
 
 
 def fetch_page_links(url: str, timeout: float = 6.0) -> list[str]:
-    req = Request(
-        url,
-        headers={
-            "User-Agent": "Mozilla/5.0 (compatible; URLDetectorBot/1.0; +https://example.com/bot)"
-        },
-    )
-    with urlopen(req, timeout=timeout) as resp:
-        content_type = resp.headers.get("Content-Type", "")
-        if "text/html" not in content_type:
-            return []
-        html = resp.read().decode("utf-8", errors="ignore")
+    clean_url = normalize_http_url(url)
+    if not clean_url:
+        return []
+    try:
+        req = Request(
+            clean_url,
+            headers={
+                "User-Agent": "Mozilla/5.0 (compatible; URLDetectorBot/1.0; +https://example.com/bot)"
+            },
+        )
+        with urlopen(req, timeout=timeout) as resp:
+            content_type = resp.headers.get("Content-Type", "")
+            if "text/html" not in content_type:
+                return []
+            html = resp.read().decode("utf-8", errors="ignore")
+    except (HTTPError, URLError, TimeoutError, ValueError):
+        return []
 
     parser = LinkParser()
     parser.feed(html)
@@ -294,12 +300,15 @@ with main_tabs[1]:
     same_domain_only = st.checkbox("仅采集同域名 URL", value=True)
 
     if st.button("开始采集 URL"):
-        urls, errors = crawl_urls(
-            seed_url=seed_url,
-            max_urls=int(max_urls),
-            same_domain_only=same_domain_only,
-            max_depth=max_depth,
-        )
+        try:
+            urls, errors = crawl_urls(
+                seed_url=seed_url,
+                max_urls=int(max_urls),
+                same_domain_only=same_domain_only,
+                max_depth=max_depth,
+            )
+        except Exception as exc:
+            urls, errors = [], [f"采集异常中断：{exc}"]
 
         if urls:
             st.session_state.collected_errors = errors
@@ -355,6 +364,8 @@ with main_tabs[1]:
                     )
                 except Exception as exc:
                     st.error(f"采集 URL 批量检测失败：{exc}")
+        else:
+            st.session_state.collected_errors = errors
     if isinstance(st.session_state.collected_urls_result, pd.DataFrame):
         st.info("已恢复上次采集结果")
         st.dataframe(st.session_state.collected_urls_result, use_container_width=True)
