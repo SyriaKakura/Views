@@ -4,7 +4,7 @@
 """
 
 import time
-from url_detector import MaliciousURLDetector
+from app.legacy.detector import MaliciousURLDetector
 
 def demo_basic_detection():
     """演示基本检测功能"""

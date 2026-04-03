@@ -8,18 +8,18 @@ class Config:
     """基础配置类"""
     
     # 项目根目录
-    BASE_DIR = Path(__file__).parent
+    BASE_DIR = Path(__file__).resolve().parents[2]
     
     # 模型文件路径
-    MODEL_DIR = BASE_DIR / "models"
+    MODEL_DIR = BASE_DIR / "artifacts" / "legacy_models"
     DEFAULT_MODEL_PATH = MODEL_DIR / "malicious_url_model.pkl"
     
     # 数据文件路径
-    DATA_DIR = BASE_DIR / "data"
+    DATA_DIR = BASE_DIR / "data" / "legacy"
     TRAINING_DATA_PATH = DATA_DIR / "enhanced_malicious_url_training_data.csv"
     
     # 日志配置
-    LOG_DIR = BASE_DIR / "logs"
+    LOG_DIR = BASE_DIR / "artifacts" / "legacy_logs"
     LOG_LEVEL = "INFO"
     LOG_FORMAT = "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     
