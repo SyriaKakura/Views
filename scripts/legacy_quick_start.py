@@ -77,7 +77,7 @@ def train_model():
     print("\n🤖 训练机器学习模型...")
     
     try:
-        if Path("malicious_url_model.pkl").exists():
+        if Path("artifacts/legacy_models/malicious_url_model.pkl").exists():
             print("✅ 训练好的模型已存在，跳过训练")
             return True
         

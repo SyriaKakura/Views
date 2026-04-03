@@ -1,6 +1,6 @@
 import pandas as pd
 import numpy as np
-from url_detector import MaliciousURLDetector
+from app.legacy.detector import MaliciousURLDetector
 from sklearn.model_selection import train_test_split, cross_val_score, GridSearchCV
 from sklearn.ensemble import RandomForestClassifier, GradientBoostingClassifier
 from sklearn.linear_model import LogisticRegression
@@ -156,7 +156,7 @@ def train_models(X_train, X_test, y_train, y_test):
     X_test_scaled = scaler.transform(X_test)
     
     # 保存标准化器
-    joblib.dump(scaler, 'url_scaler.pkl')
+    joblib.dump(scaler, 'artifacts/legacy_models/url_scaler.pkl')
     print("💾 标准化器已保存为: url_scaler.pkl")
     
     # 定义模型
@@ -247,7 +247,7 @@ def main():
     print("=" * 60)
     
     # 数据路径
-    data_path = 'enhanced_malicious_url_training_data.csv'
+    data_path = 'data/legacy/enhanced_malicious_url_training_data.csv'
     
     # 加载数据
     data = load_and_prepare_data(data_path)
@@ -285,7 +285,7 @@ def main():
     # 保存最佳模型到主检测器
     detector = MaliciousURLDetector()
     detector.model = best_model
-    joblib.dump(detector, 'malicious_url_model.pkl')
+    joblib.dump(detector, 'artifacts/legacy_models/malicious_url_model.pkl')
     print("\n最佳模型已保存到主检测器: malicious_url_model.pkl")
     
     # 模型性能总结

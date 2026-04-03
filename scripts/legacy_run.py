@@ -8,8 +8,8 @@ import sys
 import argparse
 import logging
 from pathlib import Path
-from config import get_config, create_directories, validate_config
-from url_detector import MaliciousURLDetector
+from app.legacy.config import get_config, create_directories, validate_config
+from app.legacy.detector import MaliciousURLDetector
 import joblib
 
 def setup_logging(config):
@@ -95,7 +95,7 @@ def check_dependencies():
 def start_web_service(config, detector, logger):
     """启动Web服务"""
     try:
-        from app import app
+        from app.legacy.flask_app import app
         
         # 设置全局检测器
         app.detector = detector
