@@ -1,0 +1,32 @@
+2025-08-29 01:50:59,638 - __main__ - INFO - ÈÕÖ¾ÏµÍ³³õÊ¼»¯Íê³É
+2025-08-29 01:50:59,641 - __main__ - INFO - ÕýÔÚ³õÊ¼»¯URL¼ì²âÆ÷...
+2025-08-29 01:50:59,641 - __main__ - WARNING - Î´·¢ÏÖÔ¤ÑµÁ·Ä£ÐÍ£¬½«Ê¹ÓÃ»ù´¡¼ì²âÆ÷
+2025-08-29 01:50:59,655 - __main__ - INFO - Æô¶¯Web·þÎñ: 0.0.0.0:5000
+2025-08-29 01:50:59,656 - __main__ - INFO - µ÷ÊÔÄ£Ê½: True
+2025-08-29 01:50:59,704 - werkzeug - INFO - [31m[1mWARNING: This is a development server. Do not use it in a production deployment. Use a production WSGI server instead.[0m
+ * Running on all addresses (0.0.0.0)
+ * Running on http://127.0.0.1:5000
+ * Running on http://192.168.1.4:5000
+2025-08-29 01:50:59,705 - werkzeug - INFO - [33mPress CTRL+C to quit[0m
+2025-08-29 01:50:59,751 - werkzeug - INFO -  * Restarting with watchdog (windowsapi)
+2025-08-29 01:51:02,861 - __main__ - INFO - ÈÕÖ¾ÏµÍ³³õÊ¼»¯Íê³É
+2025-08-29 01:51:02,862 - __main__ - INFO - ÕýÔÚ³õÊ¼»¯URL¼ì²âÆ÷...
+2025-08-29 01:51:02,862 - __main__ - WARNING - Î´·¢ÏÖÔ¤ÑµÁ·Ä£ÐÍ£¬½«Ê¹ÓÃ»ù´¡¼ì²âÆ÷
+2025-08-29 01:51:02,868 - __main__ - INFO - Æô¶¯Web·þÎñ: 0.0.0.0:5000
+2025-08-29 01:51:02,868 - __main__ - INFO - µ÷ÊÔÄ£Ê½: True
+2025-08-29 01:51:02,880 - werkzeug - WARNING -  * Debugger is active!
+2025-08-29 01:51:02,885 - werkzeug - INFO -  * Debugger PIN: 337-679-859
+2025-08-29 01:51:35,185 - werkzeug - INFO - 127.0.0.1 - - [29/Aug/2025 01:51:35] "[33mGET / HTTP/1.1[0m" 404 -
+2025-08-29 01:51:35,219 - werkzeug - INFO - 127.0.0.1 - - [29/Aug/2025 01:51:35] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-08-29 01:51:51,882 - werkzeug - INFO - 127.0.0.1 - - [29/Aug/2025 01:51:51] "[33mGET / HTTP/1.1[0m" 404 -
+2025-08-29 01:51:51,934 - werkzeug - INFO - 127.0.0.1 - - [29/Aug/2025 01:51:51] "[33mGET /favicon.ico HTTP/1.1[0m" 404 -
+2025-08-29 01:52:04,294 - werkzeug - INFO -  * Detected change in 'C:\\Users\\ROG\\Desktop\\URL\\run.py', reloading
+2025-08-29 01:52:04,295 - werkzeug - INFO -  * Detected change in 'C:\\Users\\ROG\\Desktop\\URL\\run.py', reloading
+2025-08-29 01:52:05,469 - werkzeug - INFO -  * Restarting with watchdog (windowsapi)
+2025-08-29 01:52:08,635 - __main__ - INFO - ÈÕÖ¾ÏµÍ³³õÊ¼»¯Íê³É
+2025-08-29 01:52:08,635 - __main__ - INFO - ÕýÔÚ³õÊ¼»¯URL¼ì²âÆ÷...
+2025-08-29 01:52:08,635 - __main__ - WARNING - Î´·¢ÏÖÔ¤ÑµÁ·Ä£ÐÍ£¬½«Ê¹ÓÃ»ù´¡¼ì²âÆ÷
+2025-08-29 01:52:08,638 - __main__ - INFO - Æô¶¯Web·þÎñ: 0.0.0.0:5000
+2025-08-29 01:52:08,638 - __main__ - INFO - µ÷ÊÔÄ£Ê½: True
+2025-08-29 01:52:08,651 - werkzeug - WARNING -  * Debugger is active!
+2025-08-29 01:52:08,657 - werkzeug - INFO -  * Debugger PIN: 337-679-859
